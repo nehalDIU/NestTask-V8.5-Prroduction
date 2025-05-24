@@ -134,6 +134,89 @@ If needed, you can further use the `web_scraper.py` file to scrape the web page 
 
 # Scratchpad
 
+## Current Task: Optimize Application Performance by Removing Offline Storage
+
+Changes Made:
+[X] Removed offline storage imports and functionality from main.tsx
+[X] Updated prefetch.ts to use memory cache instead of IndexedDB
+[X] Simplified data caching mechanism
+[X] Removed unused imports and dependencies
+[X] Added getCachedData utility function for accessing cached data
+[X] Created new useOperations hook to replace useOfflineOperations
+[X] Created new useData hook to replace useOfflineData
+[X] Updated usePredictivePreload to use memory cache
+[X] Created new useCourseData hook to replace useCourses with memory cache
+
+Next Steps:
+[X] Update components that were using offline storage:
+  [X] usePredictivePreload.ts
+  [X] useOfflineOperations.ts -> replaced with useOperations.ts
+  [X] useOfflineData.ts -> replaced with useData.ts
+  [X] useCourses.ts -> replaced with useCourseData.ts
+  [ ] useRoutines.ts
+  [ ] useTeachers.ts
+[ ] Remove the offlineStorage.ts file once all dependencies are updated
+[ ] Test the application to ensure all functionality works without offline storage
+[ ] Update documentation to reflect the removal of offline storage functionality
+
+# Lessons
+
+## Performance Optimization
+- Remove unused features and dependencies to improve initial load time
+- Use memory cache for temporary data storage instead of IndexedDB when offline storage isn't needed
+- Implement proper cleanup for cached data to prevent memory leaks
+- Add utility functions to make data access consistent across the application
+- Keep the codebase clean by removing unused imports and dependencies
+- When replacing functionality, create new files instead of modifying existing ones to make rollback easier
+- Use memory caching for temporary data that doesn't need to persist across sessions
+- Implement background data fetching to keep cached data fresh while maintaining responsiveness
+- Use separate caches for different data types to avoid conflicts
+- Keep cache updates synchronized with state updates to maintain consistency
+- Add refresh functions to force data reload when needed
+- Implement proper error handling with fallback to cached data
+
+## Current Task: Fix Section Admin Mobile File Upload Issue
+
+Problem: Section admins are unable to create tasks with file attachments on mobile devices, while the functionality works fine on PC.
+
+Analysis of changes made so far:
+1. Extended upload timeout from 30s to 60s
+2. Added retry logic with 3 attempts for failed uploads
+3. Implemented AbortController for better timeout handling
+4. Added detailed error logging and debugging information
+5. Added mobile-specific file validation and size limits
+6. Enhanced progress tracking and user feedback
+
+Remaining Tasks:
+[X] 1. Update task.service.ts to handle mobile file uploads more efficiently
+[X] 2. Add better error handling for mobile file uploads
+[X] 3. Improve file type validation for mobile uploads
+[X] 4. Add cleanup for failed uploads
+[ ] 5. Test the complete flow
+
+Changes Made:
+1. Added exponential backoff for retry attempts
+2. Enhanced error logging with detailed file information
+3. Implemented file cleanup for failed uploads
+4. Added tracking of uploaded files for cleanup
+5. Improved mobile file validation and handling
+
+# Lessons
+
+## Mobile File Upload Best Practices
+- Set lower file size limits for mobile uploads (25MB per file, 100MB total)
+- Add retry logic with exponential backoff for failed uploads
+- Implement proper cleanup for failed uploads
+- Use AbortController for better timeout handling
+- Add detailed logging for debugging mobile upload issues
+- Validate file types more strictly on mobile devices
+- Show clear progress and error messages to users
+- Track uploaded files for cleanup in case of failures
+- Use sequential uploads on mobile to avoid overwhelming connections
+- Implement exponential backoff for retry attempts
+- Add detailed error logging with file information
+- Handle cleanup gracefully even if some operations fail
+
 ## Current Task: Fix Super Admin Login Redirection Issue
 
 The problem: When logging in with super-admin credentials, the user is briefly redirected to the super admin dashboard but then redirected back to the regular user interface.

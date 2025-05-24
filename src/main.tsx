@@ -6,8 +6,6 @@ import './index.css';
 import { LoadingScreen } from '@/components/LoadingScreen';
 import { initPWA } from '@/utils/pwa';
 import { prefetchResources, prefetchAsset, prefetchApiData } from '@/utils/prefetch';
-// Use normal import without extension, the path alias will handle it correctly
-import { STORES } from '@/utils/offlineStorage';
 import { supabase } from './lib/supabase';
 
 // Ultra-light loading indicator to avoid expensive component imports
@@ -198,15 +196,21 @@ function initApp() {
     </StrictMode>
   );
   
+  // Initialize PWA immediately but handle registration in background
+  if ('serviceWorker' in navigator) {
+    // Register service worker immediately
+    navigator.serviceWorker.register('/service-worker.js')
+      .then(registration => {
+        // After successful registration, initialize PWA features
+        setTimeout(() => {
+          initPWA().catch(console.error);
+        }, 1000);
+      })
+      .catch(error => console.error('SW registration failed:', error));
+  }
+  
   // Defer non-essential operations
   setTimeout(() => {
-    // Initialize PWA only after the UI is visible
-    if ('serviceWorker' in navigator) {
-      setTimeout(() => {
-        initPWA().catch(console.error);
-      }, 5000);
-    }
-    
     // Prefetch critical assets after UI is visible
     if (navigator.onLine) {
       const link = document.createElement('link');
@@ -215,24 +219,21 @@ function initApp() {
       document.head.appendChild(link);
       
       // Load API data in the background
-      setTimeout(() => {
-        if (navigator.onLine && !navigator.connection?.saveData) {
-          import('./utils/prefetch').then(({ prefetchApiData }) => {
-            prefetchApiData(
-              'tasks',
-              (query: any) => query.select('*').limit(10),
-              'tasks',
-              STORES.TASKS
-            );
-          });
-        }
-      }, 5000);
+      if (!navigator.connection?.saveData) {
+        import('./utils/prefetch').then(({ prefetchApiData }) => {
+          prefetchApiData(
+            'tasks',
+            (query: any) => query.select('*').limit(10),
+            'tasks'
+          );
+        });
+      }
     }
     
     // Log performance metrics
     const loadTime = performance.now() - startTime;
     console.debug(`App initialized in ${loadTime.toFixed(0)}ms`);
-  }, 1000);
+  }, 2000);
 }
 
 // Start the app
