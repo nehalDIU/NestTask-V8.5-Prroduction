@@ -1,25 +1,35 @@
 import { useState, useEffect, useRef, useReducer, useCallback } from 'react';
-import { 
-  Tag, 
-  Calendar, 
-  AlignLeft, 
-  ListTodo, 
+import {
+  Tag,
+  Calendar,
+  AlignLeft,
+  ListTodo,
   AlertCircle,
   CheckCircle,
   Upload,
   X,
-  Paperclip
+  Paperclip,
+  Link,
+  ExternalLink,
+  Plus
 } from 'lucide-react';
 import type { NewTask } from '../../../types/task';
+import {
+  isValidGoogleDriveUrl,
+  normalizeGoogleDriveUrl,
+  getGoogleDriveResourceType,
+  validateGoogleDriveUrls
+} from '../../../utils/googleDriveUtils';
 
 interface TaskFormProps {
   onSubmit: (task: NewTask) => void;
   sectionId?: string;
   isSectionAdmin?: boolean;
+  isSubmitting?: boolean;
 }
 
-// Extended error type to include files property
-type TaskFormErrors = Partial<Record<keyof NewTask | 'files', string>>;
+// Extended error type to include files and googleDriveLinks properties
+type TaskFormErrors = Partial<Record<keyof NewTask | 'files' | 'googleDriveLinks', string>>;
 
 // Form state interface
 interface FormState {
@@ -27,18 +37,23 @@ interface FormState {
   errors: TaskFormErrors;
   files: File[];
   fileUrls: string[];
+  googleDriveLinks: string[];
+  currentGoogleDriveLink: string;
   isSubmitting: boolean;
   success: boolean;
   uploadProgress: number;
 }
 
 // Form action types
-type FormAction = 
+type FormAction =
   | { type: 'SET_TASK_FIELD', field: keyof NewTask, value: string }
   | { type: 'SET_ERRORS', errors: TaskFormErrors }
-  | { type: 'CLEAR_ERROR', field: keyof NewTask | 'files' }
+  | { type: 'CLEAR_ERROR', field: keyof NewTask | 'files' | 'googleDriveLinks' }
   | { type: 'ADD_FILES', newFiles: File[], newUrls: string[] }
   | { type: 'REMOVE_FILE', index: number }
+  | { type: 'SET_CURRENT_GOOGLE_DRIVE_LINK', link: string }
+  | { type: 'ADD_GOOGLE_DRIVE_LINK', link: string }
+  | { type: 'REMOVE_GOOGLE_DRIVE_LINK', index: number }
   | { type: 'SET_SUBMITTING', isSubmitting: boolean }
   | { type: 'SET_SUCCESS', success: boolean }
   | { type: 'SET_UPLOAD_PROGRESS', progress: number }
@@ -52,11 +67,14 @@ const createInitialState = (sectionId?: string): FormState => ({
     dueDate: '',
     description: '',
     status: 'in-progress',
-    sectionId: sectionId || undefined
+    sectionId: sectionId || undefined,
+    googleDriveLinks: []
   },
   errors: {},
   files: [],
   fileUrls: [],
+  googleDriveLinks: [],
+  currentGoogleDriveLink: '',
   isSubmitting: false,
   success: false,
   uploadProgress: 0
@@ -95,6 +113,31 @@ function formReducer(state: FormState, action: FormAction): FormState {
         ...state,
         files: state.files.filter((_, i) => i !== action.index),
         fileUrls: state.fileUrls.filter((_, i) => i !== action.index)
+      };
+    case 'SET_CURRENT_GOOGLE_DRIVE_LINK':
+      return {
+        ...state,
+        currentGoogleDriveLink: action.link
+      };
+    case 'ADD_GOOGLE_DRIVE_LINK':
+      return {
+        ...state,
+        googleDriveLinks: [...state.googleDriveLinks, action.link],
+        currentGoogleDriveLink: '',
+        taskDetails: {
+          ...state.taskDetails,
+          googleDriveLinks: [...(state.taskDetails.googleDriveLinks || []), action.link]
+        }
+      };
+    case 'REMOVE_GOOGLE_DRIVE_LINK':
+      const newGoogleDriveLinks = state.googleDriveLinks.filter((_, i) => i !== action.index);
+      return {
+        ...state,
+        googleDriveLinks: newGoogleDriveLinks,
+        taskDetails: {
+          ...state.taskDetails,
+          googleDriveLinks: newGoogleDriveLinks
+        }
       };
     case 'SET_SUBMITTING':
       return {
@@ -192,7 +235,38 @@ const FileItem = ({ file, onRemove }: { file: File; onRemove: () => void }) => (
   </div>
 );
 
-export function TaskForm({ onSubmit, sectionId, isSectionAdmin = false }: TaskFormProps) {
+// Google Drive Link Item Component
+const GoogleDriveLinkItem = ({ url, onRemove }: { url: string; onRemove: () => void }) => (
+  <div className="flex items-center justify-between py-2 px-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+    <div className="flex items-center gap-2 truncate max-w-[85%]">
+      <Link className="w-4 h-4 text-blue-500 dark:text-blue-400 flex-shrink-0" />
+      <div className="flex flex-col min-w-0">
+        <span className="text-sm text-blue-700 dark:text-blue-300 truncate">{getGoogleDriveResourceType(url)}</span>
+        <span className="text-xs text-blue-600 dark:text-blue-400 truncate">{url}</span>
+      </div>
+    </div>
+    <div className="flex items-center gap-1 ml-2">
+      <button
+        type="button"
+        onClick={() => window.open(url, '_blank', 'noopener,noreferrer')}
+        className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 p-1 rounded-full hover:bg-blue-100 dark:hover:bg-blue-800 touch-manipulation"
+        aria-label="Open Google Drive link"
+      >
+        <ExternalLink className="w-4 h-4" />
+      </button>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="text-gray-500 hover:text-red-500 dark:text-gray-400 dark:hover:text-red-400 p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 touch-manipulation"
+        aria-label="Remove Google Drive link"
+      >
+        <X className="w-4 h-4" />
+      </button>
+    </div>
+  </div>
+);
+
+export function TaskForm({ onSubmit, sectionId, isSectionAdmin = false, isSubmitting = false }: TaskFormProps) {
   // Use reducer for form state management
   const [state, dispatch] = useReducer(formReducer, createInitialState(sectionId));
   
@@ -202,7 +276,9 @@ export function TaskForm({ onSubmit, sectionId, isSectionAdmin = false }: TaskFo
     errors,
     files,
     fileUrls,
-    isSubmitting,
+    googleDriveLinks,
+    currentGoogleDriveLink,
+    isSubmitting: formIsSubmitting,
     success,
     uploadProgress
   } = state;
@@ -349,6 +425,72 @@ export function TaskForm({ onSubmit, sectionId, isSectionAdmin = false }: TaskFo
     }
     dispatch({ type: 'REMOVE_FILE', index });
   }, [fileUrls]);
+
+  // Handle Google Drive link input change
+  const handleGoogleDriveLinkChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    dispatch({ type: 'SET_CURRENT_GOOGLE_DRIVE_LINK', link: value });
+
+    // Clear error when user types
+    if (errors.googleDriveLinks) {
+      dispatch({ type: 'CLEAR_ERROR', field: 'googleDriveLinks' });
+    }
+  }, [errors.googleDriveLinks]);
+
+  // Add Google Drive link
+  const addGoogleDriveLink = useCallback(() => {
+    const trimmedLink = currentGoogleDriveLink.trim();
+
+    if (!trimmedLink) {
+      dispatch({
+        type: 'SET_ERRORS',
+        errors: {
+          ...errors,
+          googleDriveLinks: 'Please enter a Google Drive link'
+        }
+      });
+      return;
+    }
+
+    if (!isValidGoogleDriveUrl(trimmedLink)) {
+      dispatch({
+        type: 'SET_ERRORS',
+        errors: {
+          ...errors,
+          googleDriveLinks: 'Please enter a valid Google Drive URL'
+        }
+      });
+      return;
+    }
+
+    // Check for duplicates
+    const normalizedLink = normalizeGoogleDriveUrl(trimmedLink);
+    if (googleDriveLinks.includes(normalizedLink)) {
+      dispatch({
+        type: 'SET_ERRORS',
+        errors: {
+          ...errors,
+          googleDriveLinks: 'This Google Drive link has already been added'
+        }
+      });
+      return;
+    }
+
+    dispatch({ type: 'ADD_GOOGLE_DRIVE_LINK', link: normalizedLink });
+  }, [currentGoogleDriveLink, googleDriveLinks, errors]);
+
+  // Remove Google Drive link
+  const removeGoogleDriveLink = useCallback((index: number) => {
+    dispatch({ type: 'REMOVE_GOOGLE_DRIVE_LINK', index });
+  }, []);
+
+  // Handle Enter key press in Google Drive link input
+  const handleGoogleDriveLinkKeyPress = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addGoogleDriveLink();
+    }
+  }, [addGoogleDriveLink]);
   
   // Get minimum date for date input
   const getMinDate = useCallback(() => {
@@ -517,7 +659,7 @@ export function TaskForm({ onSubmit, sectionId, isSectionAdmin = false }: TaskFo
       <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-5 sm:space-y-6">
         {success && <SuccessMessage />}
 
-        {isSubmitting && uploadProgress > 0 && uploadProgress < 100 && (
+        {formIsSubmitting && uploadProgress > 0 && uploadProgress < 100 && (
           <ProgressBar progress={uploadProgress} />
         )}
 
@@ -670,18 +812,79 @@ export function TaskForm({ onSubmit, sectionId, isSectionAdmin = false }: TaskFo
               )}
             </FormField>
           </div>
+
+          {/* Google Drive Links Section - Only for Section Admins */}
+          {isSectionAdmin && (
+            <div className="col-span-1 sm:col-span-2">
+              <FormField id="googleDriveLinks" label="Google Drive Links" error={errors.googleDriveLinks}>
+                <div className="space-y-3">
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none">
+                        <Link className="w-5 h-5" />
+                      </div>
+                      <input
+                        type="url"
+                        id="googleDriveLink"
+                        value={currentGoogleDriveLink}
+                        onChange={handleGoogleDriveLinkChange}
+                        onKeyPress={handleGoogleDriveLinkKeyPress}
+                        placeholder="Paste Google Drive link here..."
+                        className={`w-full pl-10 pr-4 py-3 border ${
+                          errors.googleDriveLinks ? 'border-red-500 dark:border-red-500' : 'border-gray-300 dark:border-gray-600'
+                        } rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white text-sm sm:text-base touch-manipulation`}
+                        aria-describedby={errors.googleDriveLinks ? "googleDriveLinks-error" : undefined}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={addGoogleDriveLink}
+                      disabled={!currentGoogleDriveLink.trim()}
+                      className={`px-4 py-3 rounded-xl font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 touch-manipulation ${
+                        currentGoogleDriveLink.trim()
+                          ? 'bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white'
+                          : 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+                      }`}
+                      aria-label="Add Google Drive link"
+                    >
+                      <Plus className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                    <p>Supported: Google Drive files, folders, Docs, Sheets, Slides, and Forms</p>
+                    <p>Only section administrators can attach Google Drive links</p>
+                  </div>
+
+                  {googleDriveLinks.length > 0 && (
+                    <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                      {googleDriveLinks.map((link, index) => (
+                        <GoogleDriveLinkItem
+                          key={`${link}-${index}`}
+                          url={link}
+                          onRemove={() => removeGoogleDriveLink(index)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </FormField>
+            </div>
+          )}
         </div>
 
         <div className="flex justify-end pt-2">
           <button
             type="submit"
-            disabled={isSubmitting}
-            className={`w-full sm:w-auto px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 shadow-sm text-sm sm:text-base font-medium transition-colors duration-150 touch-manipulation ${
-              isSubmitting ? 'opacity-70 cursor-not-allowed' : ''
-            }`}
-            aria-busy={isSubmitting}
+            disabled={formIsSubmitting || isSubmitting}
+            className={`px-4 py-2 rounded-md text-white font-medium shadow-sm 
+              ${(formIsSubmitting || isSubmitting) 
+                ? 'bg-blue-400 dark:bg-blue-600 cursor-not-allowed' 
+                : 'bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600'
+              }
+              transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 w-full sm:w-auto`}
           >
-            {isSubmitting ? 'Creating Task...' : 'Create Task'}
+            {(formIsSubmitting || isSubmitting) ? 'Creating...' : 'Create Task'}
           </button>
         </div>
       </form>

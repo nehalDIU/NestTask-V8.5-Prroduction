@@ -1,122 +1,114 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { getCachedData } from '../utils/prefetch';
+import { setCache, getCache, isCacheValid } from '../utils/cache';
 
 // In-memory cache for data
 const memoryCache = new Map<string, { data: any; timestamp: string }>();
 
+// Cache expiration time in milliseconds (10 minutes)
+const CACHE_EXPIRATION = 10 * 60 * 1000;
+
 /**
- * Custom hook for managing data access with memory caching
- * @param cacheKey The key to use for caching
- * @param onlineData The data from the online source
+ * Custom hook for managing data access with simple in-memory caching
+ * @param cacheKey The cache key to use
  * @param fetcher Function to fetch data
+ * @param dependencies Array of dependencies that should trigger a refetch
  */
 export function useData<T>(
   cacheKey: string,
-  onlineData: T | null | undefined,
   fetcher: () => Promise<T>,
+  dependencies: any[] = [],
+  expirationTime: number = CACHE_EXPIRATION
 ) {
-  const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<T | null>(() => {
+    // Initialize with cached data if available
+    return getCache<T>(cacheKey);
+  });
+  const [loading, setLoading] = useState(!data);
   const [error, setError] = useState<Error | null>(null);
 
-  // Fetch data with caching
+  // Load data with dependencies
   useEffect(() => {
-    const fetchData = async () => {
+    let isMounted = true;
+    const loadData = async () => {
+      // Skip fetching if we already have valid cached data
+      if (isCacheValid(cacheKey, expirationTime) && data) {
+        return;
+      }
+
       setLoading(true);
       setError(null);
 
       try {
-        // Try to get data from memory cache first
-        const cachedData = getCachedData(cacheKey);
-        if (cachedData) {
-          console.log(`Using cached data for ${cacheKey}`);
-          setData(cachedData as T);
-          setLoading(false);
-          
-          // Fetch fresh data in the background
-          try {
-            const freshData = await fetcher();
-            setData(freshData);
-            
-            // Update memory cache
-            memoryCache.set(cacheKey, {
-              data: freshData,
-              timestamp: new Date().toISOString()
-            });
-          } catch (err) {
-            // If background fetch fails, we already have cached data so just log the error
-            console.error(`Background fetch failed for ${cacheKey}:`, err);
-          }
-        } else {
-          // No cached data, fetch fresh data
-          console.log(`Fetching fresh data for ${cacheKey}`);
-          const freshData = await fetcher();
+        const freshData = await fetcher();
+        if (isMounted) {
           setData(freshData);
-          
-          // Update memory cache
-          memoryCache.set(cacheKey, {
-            data: freshData,
-            timestamp: new Date().toISOString()
-          });
+          // Store the fetched data in memory cache
+          setCache(cacheKey, freshData);
         }
       } catch (err) {
-        console.error(`Error fetching data for ${cacheKey}:`, err);
-        setError(err as Error);
+        console.error(`Error fetching ${cacheKey} data:`, err);
+        if (isMounted) {
+          setError(err as Error);
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
-    fetchData();
+    loadData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [...dependencies, cacheKey]);
+
+  // Function to force refresh data
+  const refreshData = useCallback(async (force = false) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const freshData = await fetcher();
+      setData(freshData);
+      setCache(cacheKey, freshData);
+      return freshData;
+    } catch (err) {
+      console.error(`Error refreshing ${cacheKey} data:`, err);
+      setError(err as Error);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
   }, [cacheKey, fetcher]);
 
-  // Update memory cache when online data changes
-  useEffect(() => {
-    if (onlineData) {
-      memoryCache.set(cacheKey, {
-        data: onlineData,
-        timestamp: new Date().toISOString()
-      });
-    }
-  }, [cacheKey, onlineData]);
-
-  return { data, loading, error };
+  return { data, loading, error, refreshData };
 }
 
 /**
- * Hook for accessing tasks with memory caching
- * @param onlineData The tasks from the online source
+ * Hook for accessing tasks
  * @param fetcher Function to fetch tasks
  */
-export function useTasks<T>(
-  onlineData: T | null | undefined,
-  fetcher: () => Promise<T>,
-) {
-  return useData('tasks', onlineData, fetcher);
+export function useTasks<T>(fetcher: () => Promise<T>) {
+  return useData('tasks', fetcher);
 }
 
 /**
- * Hook for accessing routines with memory caching
- * @param onlineData The routines from the online source
+ * Hook for accessing routines
  * @param fetcher Function to fetch routines
  */
-export function useRoutines<T>(
-  onlineData: T | null | undefined,
-  fetcher: () => Promise<T>,
-) {
-  return useData('routines', onlineData, fetcher);
+export function useRoutines<T>(fetcher: () => Promise<T>) {
+  return useData('routines', fetcher);
 }
 
 /**
- * Hook for accessing user data with memory caching
- * @param onlineData The user data from the online source
+ * Hook for accessing user data
  * @param fetcher Function to fetch user data
  */
-export function useUserData<T>(
-  onlineData: T | null | undefined,
-  fetcher: () => Promise<T>,
-) {
-  return useData('user_data', onlineData, fetcher);
+export function useUserData<T>(fetcher: () => Promise<T>) {
+  return useData('user_data', fetcher);
 }
 
 /**

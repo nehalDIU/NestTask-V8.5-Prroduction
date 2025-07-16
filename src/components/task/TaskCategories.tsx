@@ -1,17 +1,14 @@
-import { useState } from 'react';
-import { 
-  BookOpen, 
-  PenSquare, 
-  Presentation, 
-  Beaker, 
-  Microscope, 
-  ListTodo, 
-  FileText, 
-  Users, 
-  Building, 
-  ChevronDown, 
-  ChevronUp, 
-  Activity, 
+import {
+  BookOpen,
+  PenSquare,
+  Presentation,
+  Beaker,
+  Microscope,
+  ListTodo,
+  FileText,
+  Users,
+  Building,
+  Activity,
   Folder,
   PencilRuler,
   GraduationCap,
@@ -26,8 +23,6 @@ interface TaskCategoriesProps {
 }
 
 export function TaskCategories({ onCategorySelect, selectedCategory, categoryCounts }: TaskCategoriesProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  
   // Calculate total tasks from all categories
   const totalTasks = Object.values(categoryCounts).reduce((sum, count) => sum + count, 0);
 
@@ -47,62 +42,75 @@ export function TaskCategories({ onCategorySelect, selectedCategory, categoryCou
     { id: 'others' as TaskCategory, label: 'Others', icon: MoreHorizontal, count: categoryCounts['others'] || 0 },
   ];
 
-  // Show first 6 categories when collapsed
-  const visibleCategories = isExpanded ? allCategories : allCategories.slice(0, 6);
-  const hasMoreCategories = allCategories.length > 6;
+
 
   return (
-    <div className="mb-8">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Categories</h2>
-        {hasMoreCategories && (
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 
-              text-xs sm:text-sm font-medium text-blue-600 dark:text-blue-400 
-              bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 
-              rounded-full transition-all duration-200"
-          >
-            <span>{isExpanded ? 'Show Less' : 'Show All'}</span>
-            {isExpanded ? (
-              <ChevronUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            ) : (
-              <ChevronDown className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            )}
-          </button>
-        )}
+    <div className="mb-3 sm:mb-4">
+      <div className="mb-3 sm:mb-4 px-3 xs:px-4 sm:px-0">
+        <h2 className="text-lg xs:text-xl sm:text-2xl font-bold text-gray-900 dark:text-white tracking-tight">
+          Tasks
+        </h2>
       </div>
-      <div className="space-y-3">
-        {/* Grid for categories */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 gap-3">
-          {visibleCategories.map(({ id, label, icon: Icon, count }) => (
+
+      {/* Mobile: Fully scrollable categories */}
+      <div className="block sm:hidden">
+        <div className="flex mobile-category-gap-xs gap-2 xs:gap-3 overflow-x-auto pb-3 mobile-category-compact px-3 xs:px-4 scrollbar-hide mobile-category-scroll">
+          {allCategories.map(({ id, label, icon: Icon, count }) => (
             <button
               key={id || 'total'}
               onClick={() => onCategorySelect(id)}
               className={`
-                group flex items-center gap-2 p-3 rounded-xl transition-all duration-200
+                flex-shrink-0 px-2.5 xs:px-3 sm:px-4 py-2 xs:py-2.5 sm:py-3 rounded-full
+                mobile-category-text-xs text-sm font-medium whitespace-nowrap
+                min-h-[44px] mobile-touch-target mobile-category-item transition-all duration-200
                 ${selectedCategory === id
-                  ? 'bg-blue-600 text-white shadow-lg scale-[1.02]'
-                  : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                 }
-                hover:shadow-md hover:-translate-y-0.5
               `}
             >
-              <div className={`
-                p-2 rounded-lg transition-colors duration-200
-                ${selectedCategory === id
-                  ? 'bg-blue-500/20'
-                  : 'bg-blue-50 dark:bg-blue-900/20 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/30'
-                }
-              `}>
-                <Icon className="w-5 h-5" />
-              </div>
-              <div className="flex-1 text-left">
-                <div className="text-sm font-medium">{label}</div>
-                <div className="text-xs opacity-80">{count} tasks</div>
-              </div>
+              {id === null ? 'All' : label}
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* Desktop: Grid layout */}
+      <div className="hidden sm:block">
+        <div className="space-y-3">
+          {/* Grid for categories */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
+            {allCategories.map(({ id, label, icon: Icon, count }) => (
+              <button
+                key={id || 'total'}
+                onClick={() => onCategorySelect(id)}
+                className={`
+                  group flex items-center gap-2 p-3 sm:p-4 rounded-xl transition-all duration-200
+                  ${selectedCategory === id
+                    ? 'bg-blue-600 text-white shadow-lg scale-[1.02]'
+                    : `bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 ${count === 0 ? 'opacity-60 hover:opacity-100' : ''}`
+                  }
+                  hover:shadow-md hover:-translate-y-0.5
+                `}
+              >
+                <div className={`
+                  p-2 rounded-lg transition-colors duration-200 flex-shrink-0
+                  ${selectedCategory === id
+                    ? 'bg-blue-500/20'
+                    : 'bg-blue-50 dark:bg-blue-900/20 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/30'
+                  }
+                `}>
+                  <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
+                </div>
+                <div className="flex-1 text-left min-w-0">
+                  <div className="text-sm font-medium truncate">{label}</div>
+                  <div className={`text-xs ${selectedCategory === id ? 'opacity-80' : (count === 0 ? 'opacity-60 group-hover:opacity-80' : 'opacity-80')}`}>
+                    {count} tasks
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </div>

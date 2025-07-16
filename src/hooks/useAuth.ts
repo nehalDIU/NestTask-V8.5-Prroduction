@@ -107,7 +107,8 @@ export function useAuth() {
       document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
     });
     
-    await forceCleanReload();
+    // Clear caches without page reload
+    forceCleanReload();
   };
 
   const updateUserState = async (authUser: any) => {
@@ -173,7 +174,7 @@ export function useAuth() {
         id: authUser.id,
         email: authUser.email!,
         name: authUser.user_metadata?.name || userData?.name || authUser.email?.split('@')[0] || '',
-        role: role as 'user' | 'admin' | 'super-admin' | 'section-admin',
+        role: role as 'user' | 'admin' | 'super-admin' | 'section_admin',
         createdAt: authUser.created_at,
         avatar: userData?.avatar,
         phone: userData?.phone || authUser.user_metadata?.phone,
@@ -283,7 +284,7 @@ export function useAuth() {
         console.log('User data from database after login:', userData);
         if (userData) {
           if (userData.role) {
-            user.role = userData.role as 'user' | 'admin' | 'super-admin' | 'section-admin';
+            user.role = userData.role as 'user' | 'admin' | 'super-admin' | 'section_admin';
             console.log('Updated user role from database:', user.role);
           }
           
@@ -318,7 +319,8 @@ export function useAuth() {
       
       setUser(user);
       
-      setTimeout(() => forceCleanReload(), 1000);
+      // Clear caches without page reload
+      forceCleanReload();
       
       return user;
     } catch (err: any) {
@@ -391,7 +393,8 @@ export function useAuth() {
       
       console.log('Logout process completed');
       
-      setTimeout(() => forceCleanReload(), 500);
+      // Clear caches without page reload
+      forceCleanReload();
       
       return true;
     } catch (err: any) {

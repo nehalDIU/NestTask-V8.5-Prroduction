@@ -13,6 +13,7 @@ export interface Database {
           created_at: string;
           is_admin_task: boolean;
           section_id?: string;
+          google_drive_links?: string[];
         };
         Insert: {
           id?: string;
@@ -25,6 +26,7 @@ export interface Database {
           created_at?: string;
           is_admin_task?: boolean;
           section_id?: string;
+          google_drive_links?: string[];
         };
         Update: {
           id?: string;
@@ -37,6 +39,7 @@ export interface Database {
           created_at?: string;
           is_admin_task?: boolean;
           section_id?: string;
+          google_drive_links?: string[];
         };
       };
       users: {
@@ -178,6 +181,45 @@ export interface Database {
           name?: string;
           batch_id?: string;
           created_at?: string;
+        };
+      };
+      lecture_slides: {
+        Row: {
+          id: string;
+          title: string;
+          description: string;
+          section_id: string;
+          file_urls: string[];
+          original_file_names: string[];
+          slide_links: string[];
+          video_links: string[];
+          created_at: string;
+          created_by: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          title: string;
+          description?: string;
+          section_id: string;
+          file_urls?: string[];
+          original_file_names?: string[];
+          slide_links?: string[];
+          video_links?: string[];
+          created_at?: string;
+          created_by?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          title?: string;
+          description?: string;
+          section_id?: string;
+          file_urls?: string[];
+          original_file_names?: string[];
+          slide_links?: string[];
+          video_links?: string[];
+          updated_at?: string;
         };
       };
     };

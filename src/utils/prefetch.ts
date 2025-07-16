@@ -1,17 +1,19 @@
 import { supabase } from '../lib/supabase';
 import { lazyLoad, preloadComponent } from './lazyLoad';
+import { setCache, getCache, isCacheValid } from './cache';
 
 // Type for prefetch options
 export interface PrefetchOptions {
   priority?: 'high' | 'medium' | 'low';
   timeout?: number;
-  keepAlive?: boolean;
 }
 
-// Map to track which routes have been prefetched to avoid duplicate work
-const prefetchedRoutes = new Map<string, boolean>();
-const prefetchedQueries = new Map<string, boolean>();
-const memoryCache = new Map<string, { data: any; timestamp: string }>();
+// Lightweight tracking sets
+const prefetchedRoutes = new Set<string>();
+const prefetchedQueries = new Set<string>();
+
+// Maximum cache age (10 minutes)
+const MAX_CACHE_AGE = 10 * 60 * 1000;
 
 /**
  * Prefetch a specific route
@@ -19,10 +21,8 @@ const memoryCache = new Map<string, { data: any; timestamp: string }>();
  * @param routeKey A unique key to identify this route
  */
 export const prefetchRoute = (importFn: () => Promise<any>, routeKey: string) => {
-  if (prefetchedRoutes.has(routeKey)) return;
-
-  // Mark as prefetched immediately to prevent duplicate requests
-  prefetchedRoutes.set(routeKey, true);
+  if (prefetchedRoutes.has(routeKey) || !navigator.onLine) return;
+  prefetchedRoutes.add(routeKey);
   preloadComponent(importFn)();
 };
 
@@ -40,9 +40,7 @@ export const prefetchApiData = async (
   options: PrefetchOptions = {}
 ) => {
   if (prefetchedQueries.has(cacheKey) || !navigator.onLine) return;
-  
-  // Mark as prefetched immediately to prevent duplicate requests
-  prefetchedQueries.set(cacheKey, true);
+  prefetchedQueries.add(cacheKey);
   
   try {
     const controller = new AbortController();
@@ -53,36 +51,23 @@ export const prefetchApiData = async (
       setTimeout(() => controller.abort(), options.timeout);
     }
     
-    // Set priority hint using the new fetch API's priority option
     const query = supabase.from(tableName);
     const queryWithOptions = queryFn(query);
     
-    // Execute the query with high priority
+    // Execute the query
     const { data, error } = await queryWithOptions;
     
     if (error) {
-      console.error(`Prefetch error for ${cacheKey}:`, error);
+      prefetchedQueries.delete(cacheKey); // Allow retry on error
       return;
     }
     
     if (data) {
-      // Store in memory cache
-      memoryCache.set(cacheKey, {
-        data,
-        timestamp: new Date().toISOString()
-      });
-      
-      console.debug(`Prefetched and cached ${cacheKey}`);
+      // Store in cache with timestamp
+      setCache(cacheKey, data);
     }
   } catch (err: unknown) {
-    if (err instanceof Error && err.name === 'AbortError') {
-      console.debug(`Prefetch aborted for ${cacheKey}`);
-    } else {
-      console.error(`Prefetch failed for ${cacheKey}:`, err);
-    }
-    
-    // Remove from prefetched queries if it failed
-    prefetchedQueries.delete(cacheKey);
+    prefetchedQueries.delete(cacheKey); // Allow retry on error
   }
 };
 
@@ -92,7 +77,7 @@ export const prefetchApiData = async (
  * @returns The cached data or null if not found
  */
 export const getCachedData = (cacheKey: string) => {
-  return memoryCache.get(cacheKey)?.data || null;
+  return getCache(cacheKey);
 };
 
 /**
@@ -105,18 +90,11 @@ export const prefetchResources = async (resources: Array<{
   loader: any;
   options?: PrefetchOptions;
 }>) => {
-  // Sort by priority (high first)
-  const sortedResources = [...resources].sort((a, b) => {
-    const priorityMap = { 'high': 2, 'medium': 1, 'low': 0 };
-    const aPriority = priorityMap[a.options?.priority || 'low'];
-    const bPriority = priorityMap[b.options?.priority || 'low'];
-    return bPriority - aPriority;
-  });
+  if (!navigator.onLine) return;
   
-  // Prefetch high priority resources immediately
-  const highPriorityResources = sortedResources.filter(r => r.options?.priority === 'high');
+  // Process high priority resources immediately
+  const highPriorityResources = resources.filter(r => r.options?.priority === 'high');
   
-  // Prefetch high priority resources immediately
   highPriorityResources.forEach(resource => {
     if (resource.type === 'route') {
       prefetchRoute(resource.loader, resource.key);
@@ -128,12 +106,12 @@ export const prefetchResources = async (resources: Array<{
     }
   });
   
-  // Prefetch low priority resources during idle time
+  // Process other resources during idle time
   if ('requestIdleCallback' in window) {
-    const lowPriorityResources = sortedResources.filter(r => r.options?.priority !== 'high');
+    const otherResources = resources.filter(r => r.options?.priority !== 'high');
     
     (window as any).requestIdleCallback(() => {
-      lowPriorityResources.forEach(resource => {
+      otherResources.forEach(resource => {
         if (resource.type === 'route') {
           prefetchRoute(resource.loader, resource.key);
         } else if (resource.type === 'api' && resource.loader) {
@@ -171,5 +149,4 @@ export const prefetchAsset = (url: string) => {
 export const clearPrefetchCache = () => {
   prefetchedRoutes.clear();
   prefetchedQueries.clear();
-  memoryCache.clear();
 }; 

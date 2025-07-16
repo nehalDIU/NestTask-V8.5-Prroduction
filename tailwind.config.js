@@ -3,6 +3,14 @@ export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   darkMode: 'class',
   theme: {
+    screens: {
+      'xs': '475px',
+      'sm': '640px',
+      'md': '768px',
+      'lg': '1024px',
+      'xl': '1280px',
+      '2xl': '1536px',
+    },
     extend: {
       animation: {
         'bounce-slow': 'bounce 2s infinite',
@@ -45,19 +53,24 @@ export default {
     },
   },
   plugins: [],
-  // Add purge options for production
-  purge: {
-    enabled: process.env.NODE_ENV === 'production',
-    content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
-    options: {
-      safelist: [
-        'dark',
-        /^bg-/,
-        /^text-/,
-        /^border-/,
-        /^hover:/,
-        /^dark:/
-      ]
-    }
-  }
+  // Updated for Tailwind CSS v3.0+
+  safelist: [
+    'dark',
+    'bg-green-50',
+    'bg-red-50',
+    'bg-blue-50',
+    'text-green-600',
+    'text-red-600',
+    'text-blue-600',
+    'border-green-200',
+    'border-red-200',
+    'border-blue-200',
+    'dark:bg-gray-800',
+    'dark:text-green-400',
+    'dark:text-red-400',
+    'dark:text-blue-400',
+    'dark:border-green-900',
+    'dark:border-red-900',
+    'dark:border-blue-900'
+  ]
 };
